@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>서울 전통特色 카페 지도</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-sA+g6kF0Qm2k2Yf3tFj9w1b7mZb4Gkypn0fU5x0Yy2M=" crossorigin=""/>
+  <style>
+    body { margin:0; font-family: "Noto Sans KR", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; }
+    #map { position: fixed; top: 0; bottom: 0; left: 35%; right: 0; }
+    #sidebar {
+      position: fixed; left: 0; top: 0; bottom: 0; width: 35%;
+      overflow: auto; padding: 18px; box-sizing: border-box;
+      background: #fff9f1; border-right: 1px solid #eee;
+    }
+    h1 { margin:0 0 12px 0; font-size: 20px; }
+    p.lead { margin:0 0 18px 0; color:#555; }
+    .place { margin-bottom:12px; padding:12px; border-radius:8px; background:#fff; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+    .place h3 { margin:0 0 6px 0; font-size:16px; }
+    .place button { margin-top:8px; display:inline-block; padding:6px 10px; border:0; border-radius:6px; background:#2b7cff; color:white; cursor:pointer; }
+    .small { font-size:13px; color:#666; margin-top:6px; }
+    .attribution { font-size:12px; color:#999; margin-top:14px; }
+    a.navlink { color:#2b7cff; text-decoration:none; }
+    @media (max-width:900px) {
+      #sidebar { width:100%; height: 45%; position: fixed; bottom: 55%; left:0; right:0; overflow:auto; }
+      #map { top:45%; left:0; }
+    }
+    img.popup-thumb { width:100%; height:140px; object-fit:cover; border-radius:6px; display:block; margin-bottom:8px; }
+  </style>
+</head>
+<body>
+  <div id="sidebar">
+    <h1>서울 전통特色 카페 지도</h1>
+    <p class="lead">다음은 사용자가 제공한 전통·특색 카페 목록입니다. 지도의 마커를 클릭하거나 목록의 버튼을 눌러 네이버 지도에서 상세 정보를 확인하세요.</p>
+
+    <!-- 장소 리스트 (사용자 제공 목록, 한국어) -->
+    <div id="places-list">
+      <!-- 각 항목은 JS에서 채워짐 -->
+    </div>
+
+    <div class="attribution">
+      데이터: 사용자가 제공한 카페명 · 위치는 클라이언트에서 OSM Nominatim으로 조회됩니다.<br/>
+      이미지: Unsplash(대표 이미지, 필요시 교체 가능). 네이버 지도 링크는 검색 결과 페이지로 연결됩니다.
+    </div>
+  </div>
+
+  <div id="map"></div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-W5n2f0m0kQ2e6gQxgG2W2h0a3w2Q5w8gqkYk8r9k0mM=" crossorigin=""></script>
+
+  <script>
+  // --- 제공하신 카페 목록 (한국어, 그대로 사용) ---
+  const places = [
+    "을지다방",
+    "커피한약방",
+    "세운나다방",
+    "학림다방",
+    "맛남다방",
+    "커피 문화사",
+    "금성다방",
+    "대오서점",
+    "나무새 찻집",
+    "천장지구",
+    "백조다방",
+    "차마시는뜰",
+    "자작나무 이야기",
+    "낙원역",
+    "커피 한잔",
+    "머무름",
+    "인사동 찻집",
+    "아부 커피",
+    "한옥 카페",
+    "아마츄어 작업실 광장시장점",
+    "Le labo",
+    "Onion cafe",
+    "Waoak Bar",
+    "수연산방",
+    "서화커피",
+    "Haus coffee",
+    "오제도",
+    "한옥 찻집",
+    "ium1966",
+    "새소리물소리"
+  ];
+
+  // Creates a friendly short description based on keywords
+  function makeDescription(name) {
+    const lower = name.toLowerCase();
+    if (name.match(/다방|찻집|한약|차|차마시는|찻/)) {
+      return "전통적인 분위기의 찻집/다방입니다. 고풍스러운 인테리어와 여유로운 시간에 머물기 좋습니다.";
+    }
+    if (name.match(/서점|대오|북|book/)) {
+      return "책과 함께하는 공간으로, 조용히 읽기 좋은 장소입니다.";
+    }
+    if (name.match(/카페|coffee|Onion|Haus|Le labo|Haus/)) {
+      return "전통 요소를 현대적으로 재해석한 카페입니다. 로컬 원두를 사용하는 경우가 많습니다.";
+    }
+    if (name.match(/역|광장시장|낙원/)) {
+      return "교통이 편한 지역의 전통적 명소 근처에 위치한 카페/지점입니다.";
+    }
+    return "서울 전통/특색이 느껴지는 카페입니다. 방문 전 네이버 지도로 상세 위치와 영업시간을 확인하세요.";
+  }
+
+  // Build the sidebar list
+  const listContainer = document.getElementById('places-list');
+  places.forEach((p, idx) => {
+    const div = document.createElement('div');
+    div.className = 'place';
+    div.innerHTML = `
+      <h3>${p}</h3>
+      <div class="small">${makeDescription(p)}</div>
+      <div style="margin-top:8px;">
+        <button data-idx="${idx}">지도에서 보기</button>
+        <a class="navlink" style="margin-left:8px;" href="https://map.naver.com/v5/search/${encodeURIComponent(p + ' 서울')}" target="_blank" rel="noopener">네이버 지도에서 열기</a>
+      </div>
+    `;
+    listContainer.appendChild(div);
+  });
+
+  // Initialize Leaflet map
+  const map = L.map('map').setView([37.5665, 126.9780], 13); // 서울 시청 기준 초기뷰
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '© OpenStreetMap contributors'
+  }).addTo(map);
+
+  // We'll store markers to allow sidebar buttons to open them
+  const markers = [];
+
+  // Geocode each place via Nominatim (client-side)
+  // Respectful rate: we'll space requests (simple sequential with small delay)
+  async function geocodeAndAdd(index) {
+    const name = places[index];
+    const q = encodeURIComponent(name + ' 서울');
+    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${q}&limit=1&addressdetails=0`;
+
+    try {
+      const resp = await fetch(url, { headers: { 'Accept-Language': 'ko' }});
+      if (!resp.ok) throw new Error('geocode error');
+      const results = await resp.json();
+      if (results && results.length > 0) {
+        const r = results[0];
+        const lat = parseFloat(r.lat), lon = parseFloat(r.lon);
+
+        // Popup content: image (Unsplash dynamic), description, naver link
+        // If you want to use local images, place them in images/{slug}.jpg and they will be used automatically
+        const slug = name.replace(/\s+/g, '_').replace(/[^\w\-]/g, '');
+        const localImg = `images/${slug}.jpg`; // if exists (user can upload), browser will try to show it; otherwise Unsplash fallback
+        const unsplash = `https://source.unsplash.com/featured/?${encodeURIComponent(name + ',korea,traditional,cafe')}`;
+
+        const popupHtml = `
+          <div style="width:230px;">
+            <img class="popup-thumb" src="${localImg}" onerror="this.onerror=null; this.src='${unsplash}';" alt="${name}">
+            <strong>${name}</strong>
+            <div style="margin-top:6px; font-size:13px; color:#444;">${makeDescription(name)}</div>
+            <div style="margin-top:8px;">
+              <a class="navlink" target="_blank" rel="noopener" href="https://map.naver.com/v5/search/${encodeURIComponent(name + ' 서울')}">네이버 지도에서 열기</a>
+            </div>
+          </div>
+        `;
+
+        const marker = L.marker([lat, lon]).addTo(map)
+          .bindPopup(popupHtml, { maxWidth: 260 });
+
+        markers[index] = marker;
+      } else {
+        // No result: create a "not found" marker near center with small popup
+        console.warn('Not found:', name);
+        markers[index] = null;
+      }
+    } catch (e) {
+      console.error('Geocode failed for', name, e);
+      markers[index] = null;
+    }
+  }
+
+  // Sequentially process geocoding with a small delay to be polite
+  (async function processAll() {
+    for (let i=0; i<places.length; i++) {
+      await geocodeAndAdd(i);
+      // small delay (500ms) to be gentle to the free geocoding service
+      await new Promise(res => setTimeout(res, 500));
+    }
+  })();
+
+  // Sidebar button handlers: zoom to marker if found; otherwise open naver map search
+  document.querySelectorAll('#places-list button').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const idx = Number(e.currentTarget.getAttribute('data-idx'));
+      const marker = markers[idx];
+      if (marker) {
+        marker.openPopup();
+        map.setView(marker.getLatLng(), 17);
+      } else {
+        // fallback: open naver map search
+        window.open(`https://map.naver.com/v5/search/${encodeURIComponent(places[idx] + ' 서울')}`, '_blank', 'noopener');
+      }
+    });
+  });
+
+  // Optional: try to get user location to center map
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(pos => {
+      const lat = pos.coords.latitude, lon = pos.coords.longitude;
+      // Only recenter if within reasonable distance of Seoul
+      if (Math.abs(lat - 37.5665) < 1 && Math.abs(lon - 126.9780) < 1) {
+        map.setView([lat, lon], 13);
+      }
+    }, ()=>{}, { timeout: 3000 });
+  }
+
+  </script>
+</body>
+</html>
